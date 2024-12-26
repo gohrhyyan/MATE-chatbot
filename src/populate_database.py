@@ -12,17 +12,12 @@ from langchain_chroma import Chroma
 def main():
     # Initialize a new argument parser (class)
     parser = argparse.ArgumentParser()
-
-    # For our parser, add an optional boolean flag for database reset. When present, sets args.reset to True
-    parser.add_argument("--reset", action="store_true", help="Reset the database.")
     
     # Parse command-line arguments
     args = parser.parse_args()
-
-    # Check if reset flag was provided
-    if args.reset:
-        print("✨ Clearing Database")
-        clear_database()
+    
+    #call schutil function that deletes everything in the chroma path folder.
+    shutil.rmtree(common.CHROMA_PATH)
 
     # Load list of documents from source
     documents = load_documents()
@@ -47,7 +42,7 @@ def load_documents():
     return documents
 
 #function used to split docuuments into chunks
-def split_documents(documents: list[Document]):
+def split_documents(documents):
 
     #initialiase a new text splitter
     text_splitter = RecursiveCharacterTextSplitter(
@@ -63,7 +58,7 @@ def split_documents(documents: list[Document]):
 
 
 #function to add the chunks into the chroma vector database
-def add_to_chroma(chunks: list[Document]):
+def add_to_chroma(chunks):
     # Load the existing database.
     db = Chroma(persist_directory = common.CHROMA_PATH, embedding_function = common.embedding_function())
 
@@ -116,13 +111,6 @@ def calculate_chunk_ids(chunks):
         chunk.metadata["id"] = chunk_id
 
     return chunks
-
-
-def clear_database():
-    #call schutil function that deletes everything in the chroma path folder.
-    if os.path.exists(common.CHROMA_PATH):
-        shutil.rmtree(common.CHROMA_PATH)
-
 
 if __name__ == "__main__":
     main()

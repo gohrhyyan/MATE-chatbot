@@ -1,34 +1,49 @@
 from langchain_ollama import OllamaEmbeddings
+import os
 
 def embedding_function():
     embeddings = OllamaEmbeddings(model="nomic-embed-text")
     return embeddings
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 #constants
-CHROMA_PATH = "chroma"
-DATA_PATH = "data"
+CHROMA_PATH = os.path.join(BASE_DIR, "chroma")
+DATA_PATH = os.path.join(BASE_DIR, "data")
 LLM = "llama3.1:8b"
 
 #tuning
-CHAT_CONTEXT_LENGTH = 10 
-CHUNK_SIZE = 2000
-CHUNK_OVERLAP = 200
-NUM_CHUNKS = 2 #number of context chunks to provide to the LLM
+CHAT_CONTEXT_LENGTH = 50
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 50
+NUM_CHUNKS = 3 #number of context chunks to provide to the LLM
 
 PROMPT_TEMPLATE = """
-AVAILABLE CONTEXT:
-{context}
----
 CURRENT CHAT:
 {chat_history}
 ***user***: {question}
 
 SYSTEM PROMPT:
 You are MATE, an expert in Materials Science and Engineering. Present information with technical precision and clarity, focusing on first principles and using appropriate terminology.
-Use your general knowledge to provide accurate information.
-You can only reference content from "AVAILABLE CONTEXT", you must cite and quote these when doing so.
-"AVAILABLE CONTEXT" is generated via Retrival Augmented Generation, which is invisible to the user- do not mention this context unless relevent to the user's query.
-If no documents are loaded, provide information without citations.
-Captions are automatically generated, as such there may be incorrect words. correct these as you deem accurate in your responses.
-Continue the conversation from "CURRENT CHAT". You are responding to the "user" as "MATE".
+
+IMPORTANT INSTRUCTIONS:
+1. When providing a response regarding taught information to the user, you must first perform a search using the ./search command.
+2. When using the ./search command, your response MUST ONLY include the command and keyword.
+Example: If user asks about polymers, respond with: "./search "polymer structure properties" ONLY
+
+Continue the conversation from "CURRENT CHAT". 
+You are responding as ***MATE***, you do not need to include "***MATE***" in your response. it is automatcially prepended for you.
+"""
+
+PROMPT_TEMPLATE_AFTER_SEARCH = """
+CURRENT CHAT:
+{chat_history}
+
+SYSTEM PROMPT:
+You are MATE, an expert in Materials Science and Engineering. Present information with technical precision and clarity, focusing on first principles and using appropriate terminology.
+You have just completed a search for additional information, returned by "SEARCH RESULTS" Use your general knowledge AND search results to provide a comprehensive answer.
+Note: Search returns may contain automatically generated captions - use your expertise to correct any obvious errors.
+
+Continue the conversation in "CURRENT CHAT", responding to the previous ***USER*** response, before your search.
+You are responding as ***MATE***, you do not need to include "***MATE***" in your response. it is automatcially prepended for you.
 """

@@ -1,6 +1,6 @@
 import common
+import re
 
-from typing import List, Tuple
 from langchain_chroma import Chroma
 from langchain.prompts import PromptTemplate
 from langchain_ollama import OllamaLLM
@@ -22,19 +22,19 @@ def main():
         elif not query_text:
             continue
             
-        query_rag(query_text, chat_history)
+        query_llm(query_text, chat_history)
 
 class ChatMessage:
-    def __init__(self, role: str, content: str):
+    def __init__(self, role, content):
         self.role = role
         self.content = content
 
 class ChatHistory:
     def __init__(self):
-        self.messages: List[ChatMessage] = []
+        self.messages = []
     
     # adds a message to the chat history
-    def add_message(self, role: str, content: str):
+    def add_message(self, role, content):
         self.messages.append(ChatMessage(role, content))
 
         # Keep only the last CHAT_CONTEXT_LENGTH messages
@@ -42,7 +42,7 @@ class ChatHistory:
             self.messages = self.messages[-common.CHAT_CONTEXT_LENGTH:]
     
     # retrieve the chat history for the prompt
-    def get_formatted_history(self) -> str:
+    def get_formatted_history(self):
         formatted = []
         for msg in self.messages:
             formatted.append(f"***{msg.role}***: {msg.content}")
@@ -52,16 +52,11 @@ class ChatHistory:
     def clear(self):
         self.messages = []
 
-def query_rag(query_text: str, chat_history: ChatHistory):
-    #Search the DB, and return the 5 most similar chunks of context.
-    results = Chroma(persist_directory= common.CHROMA_PATH, embedding_function= common.embedding_function() ).similarity_search_with_score(query_text, k=common.NUM_CHUNKS)
-
-    #create the context text for the LLM. It will be the chunks of text, seperated by new lines and three dashes.
-    context_text = "\n\n".join([f"Source: {doc.metadata.get('source', 'Unknown')} (Page {doc.metadata.get('page', 'Unknown')})\n{doc.page_content}" for doc, _score in results])
-
+def query_llm(query_text, chat_history):
     #create the prompt fo the LLM using the context text and query text.
-    prompt = PromptTemplate.from_template(common.PROMPT_TEMPLATE).format(context=context_text, question=query_text, chat_history=chat_history.get_formatted_history())
-    print(prompt)
+    prompt = PromptTemplate.from_template(common.PROMPT_TEMPLATE).format(question=query_text, chat_history=chat_history.get_formatted_history())
+    #print(prompt)
+
     #call the LLM
     response_text = OllamaLLM(model=common.LLM).invoke(prompt)
 
@@ -69,7 +64,25 @@ def query_rag(query_text: str, chat_history: ChatHistory):
     chat_history.add_message("user", query_text)
     chat_history.add_message("MATE", response_text)
 
-    print(f"Response: {response_text}")
+    if "./search" in response_text:
+        search_key = re.findall('"([^"]*)"', response_text)[0]
+        searchresult_text = rag_search(search_key)
+        chat_history.add_message("SEARCH RESULT", searchresult_text)
+        prompt_after_search = PromptTemplate.from_template(common.PROMPT_TEMPLATE_AFTER_SEARCH).format(chat_history=chat_history.get_formatted_history())
+        response_text = OllamaLLM(model=common.LLM).invoke(prompt_after_search)
+        chat_history.add_message("MATE", response_text)
+
+    #print(f"Response: {response_text}")
+    print(chat_history.get_formatted_history())
+
+
+def rag_search(search_key):
+    #Search the DB, and return the 5 most similar chunks of context.
+    results = Chroma(persist_directory= common.CHROMA_PATH, embedding_function= common.embedding_function() ).similarity_search_with_score(search_key, k=common.NUM_CHUNKS)
+
+    #create the search result text for the LLM. It will be the chunks of text, seperated by new lines and three dashes.
+    searchresult_text = "\n\n".join([f"Source: {doc.metadata.get('source', 'Unknown')} (Page {doc.metadata.get('page', 'Unknown')})\n{doc.page_content}" for doc, _score in results])
+    return searchresult_text
 
 if __name__ == "__main__":
     main()
