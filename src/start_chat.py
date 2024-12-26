@@ -75,7 +75,7 @@ def query_llm(query_text, chat_history):
         search_key = re.findall('"([^"]*)"', response_text)[0]
         searchresult_text = rag_search(search_key)
         chat_history.add_message("SEARCH RESULT", searchresult_text)
-        prompt_after_search = PromptTemplate.from_template(common.PROMPT_TEMPLATE_AFTER_SEARCH).format(chat_history=chat_history.get_formatted_history())
+        prompt_after_search = PromptTemplate.from_template(common.PROMPT_TEMPLATE_AFTER_SEARCH).format(chat_history=chat_history.get_formatted_history(), question=query_text)
         response_text = OllamaLLM(model=common.LLM).invoke(prompt_after_search)
         chat_history.add_message("MATE", response_text)
 
