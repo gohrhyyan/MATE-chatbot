@@ -131,7 +131,7 @@ def generate_response(query_text, current_chat_history, llm):
         )
         response = llm.invoke(prompt)
         chain_of_thought.clear()
-    print(prompt)
+    #print(prompt)
     return response
 
 def rag_search(search_key):
