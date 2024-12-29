@@ -98,9 +98,11 @@ def generate_response(query_text, current_chat_history, llm):
         chat_history=current_chat_history,
         )
     response = llm.invoke(prompt)
+    
 
     if "./search" in response:
         chain_of_thought = ChatHistory()
+        initial_key=""
         while "./search" in response:
             # Record the thought that led to the search
             chain_of_thought.add_message("MATE'S THOUGHTS", response)
@@ -109,10 +111,11 @@ def generate_response(query_text, current_chat_history, llm):
             search_match = re.search(r'\.\/search\s*"([^"]*)"', response)
             if search_match:
                 search_key = search_match.group(1)
+                if not(initial_key):
+                    initial_key=search_key
                 # Indicate in chat history that a search was performed
                 chat_history.add_message("MATE", f"Searching for: {search_key}")
                 search_results = rag_search(search_key)
-
                 # Add search results to chain of thought 
                 chain_of_thought.add_message("SEARCH RESULTS", search_results)
 
@@ -120,14 +123,16 @@ def generate_response(query_text, current_chat_history, llm):
             response = llm.invoke(PromptTemplate.from_template(common.PROMPT_TEMPLATE_AFTER_SEARCH).format(
                 question=query_text,
                 chat_history=current_chat_history,
-                chain_of_thought=chain_of_thought.get_formatted_history()
+                chain_of_thought=chain_of_thought.get_formatted_history(),
+                context=initial_key
             ))
 
         chain_of_thought.add_message("MATE'S THOUGHTS", response)
         prompt = PromptTemplate.from_template(common.PROMPT_TEMPLATE_AFTER_REASONING).format(
             question=query_text,
             chat_history=current_chat_history,
-            chain_of_thought=chain_of_thought.get_formatted_history()
+            chain_of_thought=chain_of_thought.get_formatted_history(),
+            context=initial_key
         )
         response = llm.invoke(prompt)
         chain_of_thought.clear()
