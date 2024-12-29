@@ -1,5 +1,6 @@
 import common
 import re
+import os
 
 from langchain_chroma import Chroma
 from langchain.prompts import PromptTemplate
@@ -32,7 +33,7 @@ class ChatHistory:
         formatted = []
         for msg in self.messages:
             formatted.append(f"***{msg.role}***: {msg.content}")
-        return "\n".join(formatted)
+        return "\n\n".join(formatted)
 
     #clears the chat history    
     def clear(self):
@@ -130,18 +131,59 @@ def generate_response(query_text, current_chat_history, llm):
         )
         response = llm.invoke(prompt)
         chain_of_thought.clear()
-    #print(prompt)
+    print(prompt)
     return response
 
-
 def rag_search(search_key):
-    print("\nsearching lecture database...")
-    #Search the DB, and return the most similar chunks of context.
-    results = Chroma(persist_directory= common.CHROMA_PATH, embedding_function= common.embedding_function() ).similarity_search_with_score(search_key, k=common.NUM_CHUNKS)
+    print("\nsearching lecture databases...")
     
-    #create the search result text for the LLM. It will be the chunks of text, seperated by new lines and three dashes.
-    searchresult_text = "\n\n".join([f"Source: {doc.metadata.get('source', 'Unknown')} (Page {doc.metadata.get('page', 'Unknown')})\n{doc.page_content}" for doc, _score in results])
-    print("\n".join([f"Searched sources: {doc.metadata.get('source','')} (Page {doc.metadata.get('page', 'Unknown')})" for doc, _score in results]))
+    # Get all database paths
+    db_paths = common.get_db_paths()
+    all_results = []
+    
+    # Search each database separately
+    for category, db_path in db_paths.items():
+        if not os.path.exists(db_path):
+            continue
+            
+        db = Chroma(persist_directory=db_path, embedding_function=common.embedding_function())
+        results = db.similarity_search_with_score(search_key, k=common.NUM_CHUNKS)
+        
+        # Add category to metadata
+        for doc, score in results:
+            doc.metadata['category'] = category
+        
+        all_results.extend(results)
+    
+    # Sort all results by similarity score
+    all_results.sort(key=lambda x: x[1])
+    
+    # Format results grouped by category
+    formatted_results = []
+    for category in db_paths.keys():
+        category_results = [r for r, _ in all_results if r.metadata.get('category') == category]
+        if category_results:
+            formatted_results.append(f"\n=== Results from {category} ===")
+            for doc in category_results:
+                formatted_results.append(
+                    f"Source: {doc.metadata.get('source', 'Unknown')} "
+                    f"(Page {doc.metadata.get('page', 'Unknown')})\n{doc.page_content}"
+                )
+    
+    searchresult_text = "\n\n".join(formatted_results)
+    
+    # Print sources found for each category
+    for category in db_paths.keys():
+        category_sources = set(doc.metadata.get('source', 'Unknown') 
+                             for doc, _ in all_results 
+                             if doc.metadata.get('category') == category)
+        if category_sources:
+            print(f"Found in {category}:")
+            for source in sorted(category_sources):
+                print(f"  - {source}")
+        else:
+            print(f"No results found in {category}")
+            
     return searchresult_text
 
 if __name__ == "__main__":
