@@ -167,53 +167,70 @@ def split_txt_by_sentences(txt_docs):
 
 #function to add the chunks into the chroma vector database
 def add_to_chroma(chunks, db_path):
-    # Load the database for this category
+    """
+    Add document chunks to Chroma database, handling duplicates
+    """
+    # Load the database
     db = Chroma(persist_directory=db_path, embedding_function=common.embedding_function())
     
-    # Calculate Page IDs
+    # Calculate chunk IDs
     chunks_with_ids = calculate_chunk_ids(chunks)
     
-    # Add or Update documents
+    # Get existing IDs
     existing_items = db.get(include=[])
     existing_ids = set(existing_items["ids"])
     
-    # Only add new documents
-    new_chunks = [chunk for chunk in chunks_with_ids if chunk.metadata["id"] not in existing_ids]
+    # Filter out duplicates
+    new_chunks = []
+    new_chunk_ids = []
+    seen_ids = set()
+    
+    for chunk in chunks_with_ids:
+        chunk_id = chunk.metadata["id"]
+        if chunk_id not in existing_ids and chunk_id not in seen_ids:
+            new_chunks.append(chunk)
+            new_chunk_ids.append(chunk_id)
+            seen_ids.add(chunk_id)
     
     if new_chunks:
         print(f"👉 Adding new documents to {os.path.basename(db_path)}: {len(new_chunks)}")
-        new_chunk_ids = [chunk.metadata["id"] for chunk in new_chunks]
         db.add_documents(new_chunks, ids=new_chunk_ids)
     else:
         print(f"✅ No new documents to add to {os.path.basename(db_path)}")
 
 
 def calculate_chunk_ids(chunks):
-
-    # This will create IDs like "data/monopoly.pdf:6:2"
-    # Page Source : Page Number : Chunk Index
-
-    last_page_id = None
-    current_chunk_index = 0
-
+    """
+    Calculate unique IDs for document chunks based on source file, page number, and chunk index.
+    
+    Args:
+        chunks: List of Document objects
+        
+    Returns:
+        List of Document objects with unique IDs added to metadata
+    """
+    # Track chunk indices per page
+    page_indices = {}
+    
     for chunk in chunks:
         source = chunk.metadata.get("source")
-        page = chunk.metadata.get("page")
-        current_page_id = f"{source}:{page}"
-
-        # If the page ID is the same as the last one, increment the index.
-        if current_page_id == last_page_id:
-            current_chunk_index += 1
+        page = chunk.metadata.get("page", 0)
+        
+        # Create unique page identifier
+        page_id = f"{source}:{page}"
+        
+        # Initialize or increment chunk index for this page
+        if page_id not in page_indices:
+            page_indices[page_id] = 0
         else:
-            current_chunk_index = 0
-
-        # Calculate the chunk ID.
-        chunk_id = f"{current_page_id}:{current_chunk_index}"
-        last_page_id = current_page_id
-
-        # Add it to the page meta-data.
+            page_indices[page_id] += 1
+            
+        # Calculate unique chunk ID
+        chunk_id = f"{page_id}:{page_indices[page_id]}"
+        
+        # Add to chunk metadata
         chunk.metadata["id"] = chunk_id
-
+        
     return chunks
 
 if __name__ == "__main__":
