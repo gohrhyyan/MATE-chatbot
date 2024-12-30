@@ -99,16 +99,18 @@ def generate_response(query_text, current_chat_history, llm):
         )
     response = llm.invoke(prompt)
     
+    if "<MATEthoughts>" in response:
+        response = response.split("</MATEthoughts>")[-1].strip()
 
-    if "./search" in response:
+    if "//search" in response:
         chain_of_thought = ChatHistory()
         initial_key=""
-        while "./search" in response:
+        while "//search" in response:
             # Record the thought that led to the search
             chain_of_thought.add_message("MATE'S THOUGHTS", response)
 
             # Extract and perform search
-            search_match = re.search(r'\.\/search\s*"([^"]*)"', response)
+            search_match = re.search(r'\/\/search\s*"([^"]*)"', response)
             if search_match:
                 search_key = search_match.group(1)
                 if not(initial_key):
@@ -134,7 +136,7 @@ def generate_response(query_text, current_chat_history, llm):
             chain_of_thought=chain_of_thought.get_formatted_history(),
             context=initial_key
         )
-        response = llm.invoke(prompt)
+        response = OllamaLLM(model=common.LLM).invoke(prompt)
         chain_of_thought.clear()
     #print(prompt)
     return response
